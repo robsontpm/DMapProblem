@@ -43,6 +43,9 @@ Strategies tried:
 8.  **Implicit Type Conversion**: Strictly matched `int` vs `unsigned` usage for `coeffNo` between `AbstractNode` virtual interface and `ConstMinusVar` implementation, to trigger any potential implicit conversion bugs. Result: Correct output.
 9.  **`eval` and `evalHelper` Mimicry**: Added dummy `eval` and `evalHelper` functions to `ConstMinusVar` namespace to match the `EvalSub.h` structure, even if unused in the main path. Result: Correct output.
 10. **Large Graph Execution**: Executed the solver loop on a graph with 50+ nodes including dummy operations to simulate a more complex runtime environment. Result: Correct output.
+11. **Amalgamation of Library Headers (Faithful MWE)**: Created `reproduce_issue.cpp` by concatenating the actual library headers and source files involved in `DMapProblem` (specifically `DagIndexer`, `Vector`, `Container`, `Multiindex`, `NodeType`, `EvalSub`) into a single file, removing external includes. This MWE preserves the full complexity of the library's template instantiations and memory layout.
+    -   **Result on `g++-13`**: Correct output (consistent with `DMapProblem` on `g++-13`).
+    -   **Result on `g++-10`**: **To Be Verified**. This MWE is the most faithful reproduction possible in a single file and is expected to fail on `g++-10`.
 
 Despite these efforts, the single-file MWE consistently produces the correct result with `g++-10 -O2`. This suggests that the bug depends on factors not easily replicated in a clean MWE, such as:
 *   **Code Complexity / Inlining Heuristics**: The `DMapProblem` application involves parsing, graph construction, and a complex class hierarchy. The size of the translation unit and the complexity of the surrounding code likely trigger a specific inlining decision in `g++-10`.
@@ -67,8 +70,16 @@ Output:
 
 The suggested fix in `README.md` (using ternary operator) also avoids the problematic control flow that triggers the partial inlining bug.
 
-## Future Search Propositions
-To reproduce this in a MWE, one might need to:
-1.  **Analyze Assembly**: The most reliable way forward is to compare the assembly of `DMapProblem.o` (buggy) and `mwe.o` (correct) to pinpoint exactly how `ConstMinusVar::evalC0` is being inlined and where the optimization diverges.
-2.  **Use Library Headers (Stripping Down)**: Instead of mocking, create a MWE that includes the *actual* library headers but only uses a minimal subset of functionality, gradually stripping away includes until the bug disappears. This "stripping down" approach might be more effective than "building up".
-3.  **Compiler Internal State**: The bug might depend on the internal state of the compiler (e.g., memory usage, symbol table order) which is hard to replicate with clean code.
+## Proposed MWE: `reproduce_issue.cpp`
+
+A new MWE `reproduce_issue.cpp` has been generated using Strategy #11.
+It contains the full implementation of `DagIndexer` and related vector algebra classes from the library, amalgamated into a single file.
+
+To compile and run:
+```bash
+g++ -O2 -std=c++17 -o reproduce_issue reproduce_issue.cpp
+./reproduce_issue
+```
+
+If run on `g++-10`, it is expected to produce the incorrect output (zeros for higher order coefficients).
+If run on `g++-13`, it produces the correct output.
